@@ -1,0 +1,3 @@
+[submodule "rp2350/lib/lvgl"]
+	path = rp2350/lib/lvgl
+	url = https://github.com/lvgl/lvgl.git

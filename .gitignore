@@ -1,0 +1,10 @@
+# build outputs
+build/
+build.log
+__pycache__/
+
+# local Wi-Fi credentials (see river_forecast_t4s3/secrets_example.h)
+secrets.h
+
+# font source files are not redistributed here (see NOTICE.md)
+*.ttf
