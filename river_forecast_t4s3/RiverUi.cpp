@@ -23,6 +23,11 @@ namespace {
 constexpr uint32_t COL_BG = 0x000000, COL_TEXT = 0xF2F4F7, COL_MUTED = 0x8A94A6, COL_DIM = 0x2A2F38,
                    COL_PANEL = 0x0E1218, COL_ACCENT = 0x38BDF8, COL_OK = 0x34D399, COL_WARN = 0xF5A524,
                    COL_BAD = 0xF2555A, COL_DEMO = 0xA78BFA, COL_HIST = 0xB8C0CC;
+// River-level bands for the chart: green below 20 ft, yellow 20-28 ft, red above 28 ft.
+constexpr uint32_t COL_LVL_OK = 0x34D399, COL_LVL_WATCH = 0xFACC15, COL_LVL_HIGH = 0xF2555A;
+constexpr int LEVEL_WATCH_CFT = 2000, LEVEL_HIGH_CFT = 2800;   // hundredths of a foot
+// EXPECTED PEAK turns yellow above 28 ft, or when it is this far above the current reading.
+constexpr float PEAK_RISE_ALERT_FT = 1.0f;
 constexpr int W = 450;
 constexpr int REFRESH_SHOW_S = 120;
 
@@ -33,6 +38,10 @@ uint16_t c565(uint32_t rgb) {
 uint16_t mix(uint32_t a, uint32_t b, float t) {   // t=0 -> a, t=1 -> b
   auto ch = [&](int sh) { return (uint32_t)(((a >> sh) & 0xFF) * (1 - t) + ((b >> sh) & 0xFF) * t) << sh; };
   return c565(ch(16) | ch(8) | ch(0));
+}
+
+uint32_t level_color(int cft) {
+  return cft < LEVEL_WATCH_CFT ? COL_LVL_OK : cft <= LEVEL_HIGH_CFT ? COL_LVL_WATCH : COL_LVL_HIGH;
 }
 
 struct Ctx {
@@ -75,9 +84,10 @@ void short_time(int64_t t, char* buf, size_t n, bool with_day) {
   else snprintf(buf, n, "%d:%02d %s", h12, l.min, l.hour < 12 ? "AM" : "PM");
 }
 
-// Observed history (grey) then forecast (line_col). The x axis runs from the first
-// observed hour to the last forecast hour, whatever that span is.
-void draw_chart(Ctx& c, const river_model_t& m, int64_t now, uint32_t line_col) {
+// Observed history (dimmer) then forecast, both coloured by river level (green /
+// yellow / red bands). The x axis runs from the first observed hour to the last
+// forecast hour, whatever that span is.
+void draw_chart(Ctx& c, const river_model_t& m, int64_t now) {
   const int X0 = 30, X1 = 420, Y0 = 302, Y1 = 466;
   TFT_eSprite& s = c.s;
   const int ox = c.ox, oy = c.oy;
@@ -135,27 +145,43 @@ void draw_chart(Ctx& c, const river_model_t& m, int64_t now, uint32_t line_col) 
     day_start = mid;
   }
 
-  auto plot = [&](const Series& sr, uint32_t col, float fill_amt) {
-    const uint16_t fill = mix(COL_PANEL, col, fill_amt), line = c565(col);
-    int px = -1, py = -1;
+  // Drawn column by column so the colour changes exactly where the line crosses 20 or 28 ft.
+  // line_amt < 1 dims the line (history); fill_amt is the area tint under it.
+  auto plot = [&](const Series& sr, float line_amt, float fill_amt) {
+    int px = -1, py = -1, pv = 0, prev_yy = -1;
     for (int i = 0; i < sr.n; i++) {
       const int v = sr.v[i];
-      if (v == APP_CHART_NONE) { px = -1; continue; }
+      if (v == APP_CHART_NONE) { px = -1; prev_yy = -1; continue; }
       const int x = X(sr.t0 + (int64_t)(i + sr.h0) * 3600), y = Y(v);
       if (px >= 0 && x > px) {
         for (int xx = px; xx <= x; xx++) {
           const int yy = py + (y - py) * (xx - px) / (x - px);
-          s.drawFastVLine(xx + ox, yy + oy, Y1 - yy, fill);
+          const int vv = pv + (v - pv) * (xx - px) / (x - px);
+          const uint32_t col = level_color(vv);
+          s.drawFastVLine(xx + ox, yy + 1 + oy, Y1 - yy - 1, mix(COL_PANEL, col, fill_amt));
+          const int top = prev_yy < 0 ? yy : (prev_yy < yy ? prev_yy : yy);
+          const int bot = prev_yy < 0 ? yy : (prev_yy > yy ? prev_yy : yy);
+          s.drawFastVLine(xx + ox, top - 1 + oy, bot - top + 2, mix(COL_PANEL, col, line_amt));   // 2 px line
+          prev_yy = yy;
         }
-        s.drawLine(px + ox, py + oy, x + ox, y + oy, line);
-        s.drawLine(px + ox, py - 1 + oy, x + ox, y - 1 + oy, line);
       }
       px = x;
       py = y;
+      pv = v;
     }
   };
-  if (m.has_obs) plot(hist, COL_HIST, 0.16f);
-  if (use_fc) plot(fc, line_col, 0.22f);
+  if (m.has_obs) plot(hist, 0.55f, 0.10f);
+  if (use_fc) plot(fc, 1.0f, 0.24f);
+
+  // 20 ft and 28 ft reference lines, when the chart's range reaches them.
+  const struct { int cft; const char* label; } refs[] = {{LEVEL_WATCH_CFT, "20 ft"}, {LEVEL_HIGH_CFT, "28 ft"}};
+  for (const auto& r : refs) {
+    if (r.cft <= lo || r.cft >= hi) continue;
+    const int y = Y(r.cft);
+    const uint16_t col = mix(COL_PANEL, level_color(r.cft + 1), 0.7f);
+    for (int x = X0; x < X1; x += 10) s.drawFastHLine(x + ox, y + oy, 5, col);
+    c.text(font_mont_20, r.label, X1, y - 3, BR_DATUM, level_color(r.cft + 1), COL_PANEL);
+  }
 
   // NOW: dashed line + label.
   if (now >= t_start && now <= t_end) {
@@ -207,7 +233,7 @@ void ui_render(TFT_eSprite& s, const river_model_t& m, int64_t now, const UiExtr
   const bool have_value = m.has_result && m.res.status != FC_STATUS_NONE;
 
   const char* pill = nullptr;
-  uint32_t pill_col = COL_BAD, value_col = COL_TEXT, chart_col = COL_ACCENT;
+  uint32_t pill_col = COL_BAD, value_col = COL_TEXT;
   static char pill_buf[64];
 
   // Window / quality line
@@ -243,16 +269,21 @@ void ui_render(TFT_eSprite& s, const river_model_t& m, int64_t now, const UiExtr
     }
     if (m.demo) {
       pill = "DEMO \xC2\xB7 NOT A LIVE FORECAST";
-      pill_col = chart_col = COL_DEMO;
+      pill_col = COL_DEMO;
     } else if (r.status == FC_STATUS_FULL) {
       pill = "COMPLETE 5-DAY FORECAST";
       pill_col = COL_OK;
     } else {
       pill = "PARTIAL FORECAST";
-      pill_col = value_col = chart_col = COL_WARN;
+      pill_col = COL_WARN;
     }
   }
 
+  // Readouts are white. The peak turns yellow above 28 ft or on a significant rise;
+  // either number goes grey when the data behind it is stale or the update failed.
+  if (have_value && (m.res.max_ft > LEVEL_HIGH_CFT / 100.0f ||
+                     (m.has_obs && m.res.max_ft - m.obs_ft >= PEAK_RISE_ALERT_FT)))
+    value_col = COL_LVL_WATCH;
   if (m.has_result && err_after) {
     snprintf(pill_buf, sizeof pill_buf, "UPDATE FAILED \xC2\xB7 SHOWING LAST DATA");
     pill = pill_buf;
@@ -309,7 +340,7 @@ void ui_render(TFT_eSprite& s, const river_model_t& m, int64_t now, const UiExtr
 
   c.text(font_mont_26, window, W / 2, 248, TC_DATUM, window_col);
 
-  if (m.has_result || m.has_obs) draw_chart(c, m, now, chart_col);
+  if (m.has_result || m.has_obs) draw_chart(c, m, now);
   if (!have_value && err_after) {
     c.text(font_mont_20, m.last_error, W / 2, m.has_result || m.has_obs ? 496 : 400, TC_DATUM, COL_BAD);
   } else if (!m.has_result && !m.has_obs && !m.error_t) {

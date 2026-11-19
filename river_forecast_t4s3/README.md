@@ -67,12 +67,12 @@ rest is the charger and regulator quiescent draw).
 | Element | Meaning |
 |---|---|
 | **NOW** | Latest gauge reading and its time. Grey with an amber time when it is over 3 h old; `--.--` when no reading in the last 12 h |
-| **EXPECTED PEAK** | Highest predicted stage between now (minus 1 h) and now + 120 h, and when it happens (`now` if that is within the hour). NOAA's forecast only; a river already above its forecast can read higher under NOW |
+| **EXPECTED PEAK** | Highest predicted stage between now (minus 1 h) and now + 120 h, and when it happens (`now` if that is within the hour). NOAA's forecast only; a river already above its forecast can read higher under NOW. White normally; **yellow** when the peak is above 28 ft or at least 1 ft above the current reading (`PEAK_RISE_ALERT_FT` in `RiverUi.cpp`). Both numbers turn grey when the data is stale or the last update failed |
 | `NEXT 5 DAYS` | Full forecast: data reaches ≥ 119 h, no gaps over 6 h, NOAA issuance under 36 h old |
 | amber `ONLY 113 OF 120 HRS FORECAST` | NOAA's forecast ends early. The value is the max of what exists, not a 5-day max |
 | amber `STILL RISING AT … FORECAST END` | Short forecast whose last point is its highest: the real peak may be later |
 | amber `FORECAST HAS GAPS` / `NOAA FORECAST ISSUED … HRS AGO` | Holes in the data, or a stale NOAA issuance |
-| Chart | Grey: observed, the last 24 h. Colour: forecast. The x axis runs from the first reading to the last forecast hour, so a short forecast fills the width instead of leaving blank space. A dashed line marks NOW; dots mark the latest reading and the peak; day names sit under each day |
+| Chart | Coloured by river level: **green** below 20 ft, **yellow** 20–28 ft, **red** above 28 ft, changing exactly where the line crosses. The last 24 h of readings are drawn dimmer than the forecast, and dashed 20 ft / 28 ft lines appear when the range reaches them. The x axis runs from the first reading to the last forecast hour, so a short forecast fills the width instead of leaving blank space. A dashed line marks NOW; dots mark the latest reading and the peak; day names sit under each day |
 | Pill | `COMPLETE 5-DAY FORECAST` (green), `PARTIAL FORECAST` (amber), `STALE` (no good update for 7 h), `UPDATE FAILED`, `DEMO` |
 
 ## Wi-Fi setup
