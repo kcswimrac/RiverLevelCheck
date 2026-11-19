@@ -5,12 +5,14 @@
 // 16-bit PSRAM sprite that is pushed in one QSPI transfer.
 #include <LilyGo_AMOLED.h>
 #include <TFT_eSPI.h>
+#include <driver/gpio.h>
 
 class Board {
  public:
   Board() : spr_(&tft_) {}
 
   bool begin() {
+    gpio_hold_dis(PANEL_POWER_PIN);   // held low through deep sleep by sleep()
     if (!amoled_.beginAMOLED_241(/*disable_sd=*/true) && !amoled_.begin()) {
       Serial.println("[AMOLED] init failed");
       return false;
@@ -49,8 +51,8 @@ class Board {
   }
 
   // pct = -1 when no cell is detected (below 2.5 V).
-  void battery(int& pct, bool& charging, bool& vbus) {
-    const int mv = amoled_.getBattVoltage();
+  void battery(int& mv, int& pct, bool& charging, bool& vbus) {
+    mv = amoled_.getBattVoltage();
     charging = amoled_.isCharging();
     vbus = amoled_.isVbusIn();
     if (mv < 2500) { pct = -1; return; }
@@ -58,7 +60,17 @@ class Board {
     pct = p < 0 ? 0 : (p > 100 ? 100 : p);
   }
 
+  // Panel off for deep sleep: AMOLED sleep-in, touch controller to sleep, charger ADC
+  // off, panel supply (GPIO 9) low and held low while the ESP32 sleeps.
+  void sleep() {
+    amoled_.setBrightness(0);
+    amoled_.sleep(/*touchpad_sleep_enable=*/true);
+    gpio_hold_en(PANEL_POWER_PIN);
+    gpio_deep_sleep_hold_en();
+  }
+
   static constexpr int W = 450, H = 600;
+  static constexpr gpio_num_t PANEL_POWER_PIN = GPIO_NUM_9;   // BOARD_AMOLED_241.PMICEnPins
 
  private:
   LilyGo_Class amoled_;

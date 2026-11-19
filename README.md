@@ -1,8 +1,8 @@
 # RiverLevelCheck
 
-A small display that shows the **highest predicted river height over the next five days** for the
-San Joaquin River at Vernalis, California (NOAA gauge **VNSC1**). It updates itself at 12 AM, 6 AM,
-12 PM and 6 PM Pacific.
+A small display that shows the **current river height** and the **highest predicted height over the
+next five days** for the San Joaquin River at Vernalis, California (NOAA gauge **VNSC1**), with a chart
+of the last 24 hours and the forecast. It updates itself at 12 AM, 6 AM, 12 PM and 6 PM Pacific.
 
 It looks ahead 120 hours instead of showing the current stage. The display separates a complete
 five-day forecast from a shorter, gappy or stale one: NOAA's VNSC1 forecast often ends a few hours
@@ -10,7 +10,7 @@ short of 120, and the device shows **PARTIAL** rather than presenting it as a fi
 
 | Folder | Hardware | Status |
 |---|---|---|
-| [`river_forecast_t4s3/`](river_forecast_t4s3/) | LilyGo T4-S3 2.41" AMOLED (ESP32-S3, Wi-Fi) | **Main build.** Fetches NOAA itself over Wi-Fi, with on-screen Wi-Fi setup |
+| [`river_forecast_t4s3/`](river_forecast_t4s3/) | LilyGo T4-S3 2.41" AMOLED (ESP32-S3, Wi-Fi) | **Main build.** Fetches NOAA itself; saves up to 5 Wi-Fi networks, set up on screen |
 | [`rp2350/`](rp2350/) | Waveshare RP2350-Touch-AMOLED-1.75 (no Wi-Fi) | Phase 1–3 prototype, fed over USB by `rp2350/tools/noaa_usb_feed.py` |
 
 Both builds compile the same pure-C core, [`river_forecast_t4s3/src/core/`](river_forecast_t4s3/src/core/):
@@ -38,7 +38,8 @@ https://water.noaa.gov/gauges/VNSC1
 2. ~~Forecast data integration (USB-fed)~~
 3. ~~River forecast interface~~
 4. ~~Standalone Wi-Fi (T4-S3)~~
-5. Battery optimisation: deep sleep between the four daily fetches and measured current draw
+5. Battery optimisation: deep sleep between fetches and an on-device battery log are built in (T4-S3),
+   but sleep is off because the screen should stay on. A measured current draw is still to do
 6. Low-power e-paper or split-flap display, and an enclosure
 
 ## Cloning

@@ -117,7 +117,9 @@ void WifiSetup::showJoining() {
 void WifiSetup::joinFailed(const String& why) {
   page_ = Page::Keyboard;
   field_ = Field::Password;
-  note_ = why;
+  note_ = tried_saved_ ? String("Saved password didn't work. Type it again.") : why;
+  if (tried_saved_) text_ = "";
+  tried_saved_ = false;
   layoutKeys();
   dirty_ = true;
 }
@@ -209,6 +211,13 @@ WifiSetup::Action WifiSetup::onTouch(int x, int y) {
         ssid_ = nets_[i].ssid;
         text_ = "";
         note_ = "";
+        tried_saved_ = false;
+        const int saved = store_ ? store_->find(ssid_) : -1;
+        if (saved >= 0) {   // known network: join with the stored password
+          text_ = store_->pass(saved);
+          tried_saved_ = true;
+          return Action::Join;
+        }
         if (nets_[i].open) return Action::Join;
         field_ = Field::Password;
         keys_ = Keys::Lower;
@@ -266,8 +275,10 @@ void WifiSetup::render(TFT_eSprite& s) {
     for (int i = 0; i < n_nets_ && !scan_pending_; i++) {
       const int y = LIST_Y + i * ROW_H;
       s.fillRoundRect(16, y, W - 32, ROW_H - 6, 10, c565(COL_PANEL));
-      text(s, font_mont_26, fit(s, font_mont_26, nets_[i].ssid, W - 140, false), 32, y + (ROW_H - 6) / 2 + 1,
-           ML_DATUM, COL_TEXT, COL_PANEL);
+      const bool saved = store_ && store_->find(nets_[i].ssid) >= 0;
+      text(s, font_mont_26, fit(s, font_mont_26, nets_[i].ssid, saved ? W - 225 : W - 140, false), 32,
+           y + (ROW_H - 6) / 2 + 1, ML_DATUM, COL_TEXT, COL_PANEL);
+      if (saved) text(s, font_mont_20, "SAVED", W - 114, y + (ROW_H - 6) / 2 + 1, MR_DATUM, COL_OK, COL_PANEL);
       if (!nets_[i].open) padlock(s, W - 104, y + 15, COL_MUTED);
       bars(s, W - 72, y + 14, nets_[i].rssi, COL_PANEL);
     }

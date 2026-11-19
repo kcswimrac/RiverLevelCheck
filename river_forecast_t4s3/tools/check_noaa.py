@@ -80,6 +80,22 @@ def main():
         return
     print(f"RESULT|{r['status']}|{r['max']:.2f}|{r['peak_t']}|{r['covered_h']:.1f}|{r['flags']}|{r['n_used']}")
     print(f"max {r['max']:.2f} ft at {pacific(r['peak_t'])}; covers {r['covered_h']:.1f} of 120 h")
+    if len(sys.argv) == 1:
+        print_observed(now)
+
+
+def print_observed(now):
+    """Latest gauge reading, as the board's OBS| line reports it."""
+    req = urllib.request.Request(URL.replace("/forecast", "/observed"),
+                                 headers={"Accept": "application/json", "User-Agent": "river-forecast-check/0.4"})
+    doc = json.load(urllib.request.urlopen(req, timeout=30))
+    obs = [(epoch(p["validTime"]), float(p["primary"])) for p in doc["data"]
+           if p.get("primary") is not None and epoch(p["validTime"]) <= now + 600]
+    if not obs:
+        print("OBS|NONE")
+        return
+    t, ft = max(obs)
+    print(f"OBS|OK|{ft:.2f}|{t}  (reading {pacific(t)})")
 
 
 if __name__ == "__main__":

@@ -1,15 +1,20 @@
 #pragma once
 // On-screen Wi-Fi setup for the 450x600 touch panel:
-//   LIST      scanned networks (strongest first) + RESCAN / OTHER / CANCEL
+//   LIST      scanned networks (strongest first, saved ones tagged) + RESCAN / OTHER / CANCEL
 //   KEYBOARD  type a password (or, via OTHER, a hidden network's name first)
 //   JOINING   shown while the main sketch tries the credentials
 // The sketch owns the radio for joining; this class only scans and collects input.
 #include <Arduino.h>
 #include <TFT_eSPI.h>
 
+#include "WifiStore.h"
+
 class WifiSetup {
  public:
   enum class Action { None, Cancel, Join };
+
+  // Saved networks join with one tap (no typing) and are tagged SAVED in the list.
+  void setStore(const WifiStore* store) { store_ = store; }
 
   // Open the setup flow. can_cancel: a network is already saved, so offer CANCEL.
   void open(bool can_cancel, const String& note = "");
@@ -43,6 +48,8 @@ class WifiSetup {
   void layoutKeys();
   Action pressKey(const Key& k);
 
+  const WifiStore* store_ = nullptr;
+  bool tried_saved_ = false;   // the current Join used the stored password
   bool active_ = false, can_cancel_ = false, scan_pending_ = false, scanned_ = false;
   bool show_text_ = true, dirty_ = true;
   Page page_ = Page::List;

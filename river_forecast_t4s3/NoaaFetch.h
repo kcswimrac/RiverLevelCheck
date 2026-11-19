@@ -11,5 +11,12 @@
 int noaa_fetch_forecast(const char* gauge, fc_point_t* pts, int max_pts, int64_t* issued_t,
                         char* err, size_t err_len);
 
+// GET .../gauges/<gauge>/stageflow/observed (about 30 days of 15-min readings,
+// ~430 KB) and keep only readings at or after since_t, scanning the stream
+// instead of building a JSON document. Refuses anything not in feet.
+// Returns the number of points kept (>= 0) or -1 with a message in err.
+int noaa_fetch_observed(const char* gauge, int64_t since_t, fc_point_t* pts, int max_pts, char* err,
+                        size_t err_len);
+
 // "2026-11-17T16:00:00Z" or "...+00:00" -> Unix seconds; false if malformed.
 bool noaa_parse_time(const char* s, int64_t* out);

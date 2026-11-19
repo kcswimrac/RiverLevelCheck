@@ -6,4 +6,4 @@
 extern const uint8_t font_mont_20[];
 extern const uint8_t font_mont_26[];
 extern const uint8_t font_mont_32[];
-extern const uint8_t font_digits_150[];   // "0123456789.-" only
+extern const uint8_t font_digits_84[];    // "0123456789.-" only

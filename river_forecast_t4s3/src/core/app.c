@@ -64,6 +64,45 @@ void app_init(river_model_t *m, const app_io_t *iop)
     memset(m, 0, sizeof *m);
     strcpy(m->gauge, "VNSC1");
     for (int i = 0; i < APP_CHART_HOURS; i++) m->chart_cft[i] = APP_CHART_NONE;
+    for (int i = 0; i <= APP_HIST_HOURS; i++) m->hist_cft[i] = APP_CHART_NONE;
+}
+
+static bool stage_ok(float ft) { return isfinite(ft) && ft >= FC_STAGE_MIN_FT && ft <= FC_STAGE_MAX_FT; }
+
+/* Hourly history bins, each holding the reading closest to its hour mark. */
+static void apply_obs_at(river_model_t *m, const fc_point_t *pts, int n, int64_t now)
+{
+    const int64_t t0 = m->has_result ? m->res.window_start : now;
+    int32_t dist[APP_HIST_HOURS + 1];
+    for (int i = 0; i <= APP_HIST_HOURS; i++) { m->hist_cft[i] = APP_CHART_NONE; dist[i] = INT32_MAX; }
+    int64_t best_t = 0;
+    float best_ft = 0;
+    int bins = 0;
+    for (int i = 0; i < n; i++) {
+        const fc_point_t *p = &pts[i];
+        if (!stage_ok(p->stage_ft) || p->t > now + 600) continue;   /* no readings from the future */
+        if (p->t > best_t) { best_t = p->t; best_ft = p->stage_ft; }
+        const int64_t rel = p->t - t0;                                /* <= 0 for history */
+        if (rel < -(APP_HIST_HOURS * 3600LL + 1800) || rel > 1800) continue;
+        const int h = (int)((rel + APP_HIST_HOURS * 3600LL + 1800) / 3600);   /* 0..24, 24 = t0 */
+        const int64_t d = rel - (int64_t)(h - APP_HIST_HOURS) * 3600;
+        const int32_t ad = (int32_t)(d < 0 ? -d : d);
+        if (h < 0 || h > APP_HIST_HOURS || ad >= dist[h]) continue;
+        if (dist[h] == INT32_MAX) bins++;
+        dist[h] = ad;
+        m->hist_cft[h] = (int16_t)lroundf(p->stage_ft * 100.0f);
+    }
+    m->hist_t0 = t0;
+    m->has_obs = best_t > 0 && now - best_t <= APP_OBS_MAX_AGE_S;
+    m->obs_ft  = m->has_obs ? best_ft : 0;
+    m->obs_t   = m->has_obs ? best_t : 0;
+    m->seq++;
+    replyf("OBS|%s|%.2f|%lld|%d", m->has_obs ? "OK" : "NONE", (double)m->obs_ft, (long long)m->obs_t, bins);
+}
+
+void app_apply_observed(river_model_t *m, const fc_point_t *pts, int n)
+{
+    apply_obs_at(m, pts, n, io->now());
 }
 
 static void build_chart(river_model_t *m, const fc_point_t *pts, int n)
@@ -72,7 +111,7 @@ static void build_chart(river_model_t *m, const fc_point_t *pts, int n)
     const int64_t t0 = m->res.window_start;
     for (int i = 0; i < n; i++) {
         const fc_point_t *p = &pts[i];
-        if (!isfinite(p->stage_ft) || p->stage_ft < FC_STAGE_MIN_FT || p->stage_ft > FC_STAGE_MAX_FT) continue;
+        if (!stage_ok(p->stage_ft)) continue;
         int64_t rel = p->t - t0;
         if (rel < -FC_LOOKBACK_S || rel > FC_HORIZON_S) continue;
         int h = rel < 0 ? 0 : (int)((rel + 1800) / 3600);
@@ -125,6 +164,12 @@ static void set_demo(river_model_t *m)
         demo[h].stage_ft = 9.10f + 3.24f * expf(-x * x);
     }
     apply_at(m, "VNSC1", now, demo, 121, now);   /* works before the clock is set */
+    static fc_point_t hist[97];                   /* 24 h of 15-min readings, slowly rising */
+    for (int i = 0; i <= 96; i++) {
+        hist[i].t = now - (96 - i) * 900LL;
+        hist[i].stage_ft = 8.40f + 0.70f * (float)i / 96.0f + 0.05f * sinf((float)i / 6.0f);
+    }
+    apply_obs_at(m, hist, 97, now);
     m->demo = true;
     m->seq++;
 }
@@ -186,11 +231,11 @@ void app_handle_line(river_model_t *m, char *line)
         selftest_run(io->reply);
     } else if (!strcmp(f[0], "STATUS")) {
         replyf("STATUS|now=%lld|has=%d|demo=%d|status=%s|max=%.2f|peak=%lld|covered_h=%.1f|flags=%lu|"
-               "updated=%lld|issued=%lld|err=%s",
+               "updated=%lld|issued=%lld|obs=%.2f|obs_t=%lld|err=%s",
                (long long)io->now(), m->has_result, m->demo, fc_status_name(m->res.status),
                (double)m->res.max_ft, (long long)m->res.peak_t, (double)m->res.covered_h,
                (unsigned long)m->res.flags, (long long)m->updated_t, (long long)m->issued_t,
-               m->error_t ? m->last_error : "-");
+               (double)m->obs_ft, (long long)m->obs_t, m->error_t ? m->last_error : "-");
     } else if (f[0][0]) {
         io->reply("NAK|unknown command");
     }
