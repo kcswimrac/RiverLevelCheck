@@ -153,7 +153,9 @@ void app_report_error(river_model_t *m, const char *msg)
     m->seq++;
 }
 
-static void set_demo(river_model_t *m)
+/* Illustrative data: a reading of now_ft after a slow 24 h rise, and a forecast
+ * that climbs to peak_ft about 58 h out. */
+static void set_demo(river_model_t *m, float now_ft, float peak_ft)
 {
     int64_t now = io->now();
     if (now <= 0) now = 1700000000;   /* values are illustrative anyway */
@@ -161,13 +163,13 @@ static void set_demo(river_model_t *m)
     for (int h = 0; h <= 120; h++) {
         float x = (float)(h - 58) / 22.0f;
         demo[h].t = now + h * 3600LL;
-        demo[h].stage_ft = 9.10f + 3.24f * expf(-x * x);
+        demo[h].stage_ft = now_ft + (peak_ft - now_ft) * expf(-x * x);
     }
     apply_at(m, "VNSC1", now, demo, 121, now);   /* works before the clock is set */
     static fc_point_t hist[97];                   /* 24 h of 15-min readings, slowly rising */
     for (int i = 0; i <= 96; i++) {
         hist[i].t = now - (96 - i) * 900LL;
-        hist[i].stage_ft = 8.40f + 0.70f * (float)i / 96.0f + 0.05f * sinf((float)i / 6.0f);
+        hist[i].stage_ft = now_ft - 0.70f * (float)(96 - i) / 96.0f + 0.05f * sinf((float)(i - 96) / 6.0f);
     }
     apply_obs_at(m, hist, 97, now);
     m->demo = true;
@@ -225,7 +227,13 @@ void app_handle_line(river_model_t *m, char *line)
         app_report_error(m, nf >= 2 ? f[1] : "");
         io->reply("OK|ERR");
     } else if (!strcmp(f[0], "DEMO")) {
-        set_demo(m);
+        float now_ft = 9.10f, peak_ft = 12.34f;   /* DEMO|<now_ft>|<peak_ft> picks the values */
+        if (nf >= 3 && (!parse_f(f[1], &now_ft) || !parse_f(f[2], &peak_ft) || !stage_ok(now_ft) ||
+                        !stage_ok(peak_ft))) {
+            io->reply("NAK|usage: DEMO or DEMO|<now_ft>|<peak_ft>");
+            return;
+        }
+        set_demo(m, now_ft, peak_ft);
         io->reply("OK|DEMO");
     } else if (!strcmp(f[0], "SELFTEST")) {
         selftest_run(io->reply);

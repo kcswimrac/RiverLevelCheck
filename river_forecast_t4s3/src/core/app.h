@@ -9,7 +9,7 @@
  *   FC|PT|<unix_utc>|<stage_ft>               e.g. a saved NOAA fixture)
  *   FC|END|<count>                         -> RESULT|<FULL|PARTIAL|NONE>|<max>|<peak_unix>|<covered_h>|<flags>|<n_used>
  *   ERR|<message>                          -> OK|ERR
- *   DEMO                                   -> OK|DEMO
+ *   DEMO | DEMO|<now_ft>|<peak_ft>         -> OK|DEMO  (illustrative data)
  *   SELFTEST                               -> SELFTEST|PASS|<n> / SELFTEST|FAIL|...
  *   STATUS                                 -> STATUS|...
  */

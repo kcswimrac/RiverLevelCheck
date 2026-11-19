@@ -101,7 +101,7 @@ used only while nothing is saved. A network saved by firmware 0.2/0.3 carries ov
 
 ## Serial commands
 
-`FETCH`, `STATUS`, `SELFTEST` (runs 20 forecast/DST test vectors on the board), `DEMO`, `PING`,
+`FETCH`, `STATUS`, `SELFTEST` (runs 20 forecast/DST test vectors on the board), `DEMO` (sample data; `DEMO|22.20|28.75` picks the NOW and peak values, for checking the layout), `PING`,
 `TIME|<unix>`, and `FC|BEGIN/PT/END` to inject a saved forecast (see `src/core/app.h`).
 
 Power: `POWER` (stats and battery log), `SLEEP` (sleep now until the next fetch), `SLEEP|<secs>` (sleep

@@ -4,7 +4,7 @@
 //   VERNALIS · VNSC1
 //   ─────────────────────────────
 //        NOW        │   EXPECTED PEAK
-//       8.66        │      10.42           <- 84 px digits
+//       8.66        │      10.42           <- 72 px digits (fit up to 39.99)
 //    ft · 7:45 AM   │  ft · Sat 4:00 AM
 //   NEXT 5 DAYS                     <- amber when the forecast is short/gappy/old
 //   [ chart: 24 h observed (grey) | NOW | forecast to its last hour (colour) ]
@@ -268,33 +268,42 @@ void ui_render(TFT_eSprite& s, const river_model_t& m, int64_t now, const UiExtr
   if (x.activity) { pill = x.activity; pill_col = COL_ACCENT; }
 
   // Two columns: NOW (latest gauge reading) and EXPECTED PEAK (forecast max).
-  constexpr int CL = 118, CR = 336, LABEL_Y = 114, BASE_Y = 206, SUB_Y = 216;
+  // Digits sit on a baseline (their top is ~53 px above it at 72 px), well clear of
+  // the labels. 72 px keeps every value up to 39.99 ft within a 200 px column; a
+  // wider number (100+ ft) drops to one decimal.
+  constexpr int CL = 118, CR = 334, LABEL_Y = 112, BASE_Y = 198, SUB_Y = 210, MAX_W = 200;
   s.drawFastVLine(W / 2 + c.ox, 116 + c.oy, 118, c565(COL_DIM));
   c.text(font_mont_20, "NOW", CL, LABEL_Y, TC_DATUM, COL_ACCENT);
   c.text(font_mont_20, "EXPECTED PEAK", CR, LABEL_Y, TC_DATUM, COL_ACCENT);
 
-  char vbuf[16];
+  auto big = [&](const float* ft, int cx, uint32_t col) {
+    char v[16] = "--.--";
+    if (ft) {
+      snprintf(v, sizeof v, "%.2f", (double)*ft);
+      if (c.width(font_digits_72, v) > MAX_W) snprintf(v, sizeof v, "%.1f", (double)*ft);
+    }
+    c.text(font_digits_72, v, cx, BASE_Y, C_BASELINE, col);
+  };
+
   if (m.has_obs) {
     const bool old = now > 0 && now - m.obs_t > 3 * 3600;   // gauge readings normally every 15 min
-    snprintf(vbuf, sizeof vbuf, "%.2f", (double)m.obs_ft);
-    c.text(font_digits_84, vbuf, CL, BASE_Y, BC_DATUM, old ? COL_MUTED : COL_TEXT);
+    big(&m.obs_ft, CL, old ? COL_MUTED : COL_TEXT);
     short_time(m.obs_t, when, sizeof when, old && now - m.obs_t > 12 * 3600);
     snprintf(buf, sizeof buf, "ft \xC2\xB7 %s", when);
     c.text(font_mont_20, buf, CL, SUB_Y, TC_DATUM, old ? COL_WARN : COL_MUTED);
   } else {
-    c.text(font_digits_84, "--.--", CL, BASE_Y, BC_DATUM, COL_DIM);
+    big(nullptr, CL, COL_DIM);
     c.text(font_mont_20, m.has_result ? "no recent reading" : "ft", CL, SUB_Y, TC_DATUM, COL_DIM);
   }
 
   if (have_value) {
-    snprintf(vbuf, sizeof vbuf, "%.2f", (double)m.res.max_ft);
-    c.text(font_digits_84, vbuf, CR, BASE_Y, BC_DATUM, value_col);
+    big(&m.res.max_ft, CR, value_col);
     if (now > 0 && m.res.peak_t <= now + 3600) snprintf(when, sizeof when, "now");
     else short_time(m.res.peak_t, when, sizeof when, true);
     snprintf(buf, sizeof buf, "ft \xC2\xB7 %s", when);
     c.text(font_mont_20, buf, CR, SUB_Y, TC_DATUM, COL_TEXT);
   } else {
-    c.text(font_digits_84, "--.--", CR, BASE_Y, BC_DATUM, COL_DIM);
+    big(nullptr, CR, COL_DIM);
     c.text(font_mont_20, "ft", CR, SUB_Y, TC_DATUM, COL_DIM);
   }
 
